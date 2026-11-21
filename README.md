@@ -8,7 +8,7 @@
 
 Simulador interativo passo a passo de **PCA (Principal Component Analysis / Análise de Componentes Principais)** para fins didáticos. A aplicação explica visualmente cada etapa do processo de PCA, desde os dados originais até a visualização final no novo sistema de coordenadas (PC1 × PC2).
 
-A interface visual utiliza a mesma identidade do sistema **Desenvolvimento** (tema calmante verde ardósia e fontes _Lexend_ e _Source Sans 3_), mantendo consistência com o simulador de BST.
+A interface visual utiliza a mesma identidade visual do simulador de Árvore Binária de Busca (BST): https://github.com/propercioggj/PCO001-BST.
 
 ---
 
@@ -50,6 +50,7 @@ O simulador guia o aluno por **4 etapas interativas**:
 O simulador utiliza por padrão os dados do famoso dataset **[Palmer Penguins](https://github.com/mwaskom/seaborn-data/blob/master/penguins.csv)** (Gorman, Williams & Fraser, 2014), amplamente utilizado no ensino de Aprendizado de Máquina e Estatística.
 
 ### Análise dos Dados Escolhidos:
+
 - **Variáveis Padrão Selecionadas:**
   - **Variável 1 (Eixo X):** `bill_length_mm` (Comprimento do Bico em mm)
   - **Variável 2 (Eixo Y):** `flipper_length_mm` (Comprimento da Nadadeira em mm)
@@ -63,6 +64,7 @@ O simulador utiliza por padrão os dados do famoso dataset **[Palmer Penguins](h
      - Tanto na amostra didática quanto na população completa de 342 pinguins, o primeiro componente principal (**PC1**) captura **mais de 93%** de toda a variância dos dados ao longo de um ângulo ótimo de **~75° a 76°**!
 
 ### Modos de Amostragem Didática:
+
 - **Amostra Didática (6 Pinguins - Padrão):** 2 Adelie, 2 Chinstrap e 2 Gentoo, permitindo inspeção individual na tabela e traçado limpo de cada projeção ortogonal.
 - **Amostra Balanceada (15 Pinguins):** 5 de cada espécie para observar a dispersão intra e entre espécies.
 - **População Completa (342 Pinguins):** Nuvem de dispersão completa com agrupamentos das 3 espécies.
