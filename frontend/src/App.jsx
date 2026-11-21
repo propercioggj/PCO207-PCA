@@ -1,113 +1,118 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import './App.css';
+import {
+  PENGUINS_DATASET,
+  GENES_DATASET,
+  SPECIES_COLORS,
+  DEFAULT_POINT_COLOR
+} from './data/datasetManager';
+import DatasetControls from './components/DatasetControls';
+import CsvImportModal from './components/CsvImportModal';
 
 // ============================================================================
-// PCA Math Engine (Pure JS - no WASM needed)
+// PCA Math Engine (Genérico para 2D)
 // ============================================================================
 const PCAEngine = {
-  // Dados originais das 6 observações (Gene A, Gene B)
-  rawData: [
-    [11, 8],
-    [9, 12],
-    [8, 10],
-    [1, 3],
-    [3, 2],
-    [4, 5],
-  ],
-
   mean(arr) {
+    if (!arr.length) return 0;
     return arr.reduce((s, v) => s + v, 0) / arr.length;
   },
 
   variance(arr) {
+    if (arr.length <= 1) return 0;
     const m = this.mean(arr);
     return arr.reduce((s, v) => s + (v - m) ** 2, 0) / (arr.length - 1);
   },
 
-  centerData(data) {
-    const col0 = data.map(r => r[0]);
-    const col1 = data.map(r => r[1]);
-    const m0 = this.mean(col0);
-    const m1 = this.mean(col1);
-    return data.map(r => [r[0] - m0, r[1] - m1]);
+  covariance(arrX, arrY) {
+    if (arrX.length <= 1) return 0;
+    const mx = this.mean(arrX);
+    const my = this.mean(arrY);
+    return arrX.reduce((s, x, i) => s + (x - mx) * (arrY[i] - my), 0) / (arrX.length - 1);
   },
 
-  // Project point onto line through origin at angle (degrees)
+  centerPoints(points) {
+    const col0 = points.map(p => p.x);
+    const col1 = points.map(p => p.y);
+    const m0 = this.mean(col0);
+    const m1 = this.mean(col1);
+    return points.map(p => ({
+      ...p,
+      x: p.x - m0,
+      y: p.y - m1,
+      origX: p.x,
+      origY: p.y
+    }));
+  },
+
   projectOntoLine(point, angleDeg) {
     const rad = (angleDeg * Math.PI) / 180;
     const dx = Math.cos(rad);
     const dy = Math.sin(rad);
-    const dot = point[0] * dx + point[1] * dy;
-    return [dot * dx, dot * dy];
+    const dot = point.x * dx + point.y * dy;
+    return { x: dot * dx, y: dot * dy, scalar: dot };
   },
 
-  // Signed distance along line direction (scalar projection)
-  scalarProjection(point, angleDeg) {
-    const rad = (angleDeg * Math.PI) / 180;
-    return point[0] * Math.cos(rad) + point[1] * Math.sin(rad);
-  },
-
-  // Perpendicular distance squared from point to line through origin
   distToLineSquared(point, angleDeg) {
     const proj = this.projectOntoLine(point, angleDeg);
-    return (point[0] - proj[0]) ** 2 + (point[1] - proj[1]) ** 2;
+    return (point.x - proj.x) ** 2 + (point.y - proj.y) ** 2;
   },
 
-  // Sum of squared distances to line
-  sumDistSquared(data, angleDeg) {
-    return data.reduce((s, p) => s + this.distToLineSquared(p, angleDeg), 0);
+  sumDistSquared(points, angleDeg) {
+    return points.reduce((s, p) => s + this.distToLineSquared(p, angleDeg), 0);
   },
 
-  // Sum of squared projection distances to origin
-  sumProjSquared(data, angleDeg) {
-    return data.reduce((s, p) => s + this.scalarProjection(p, angleDeg) ** 2, 0);
+  sumProjSquared(points, angleDeg) {
+    return points.reduce((s, p) => {
+      const proj = this.projectOntoLine(p, angleDeg);
+      return s + proj.scalar ** 2;
+    }, 0);
   },
 
-  // Find optimal angle (eigenvector direction) using covariance
-  findBestAngle(data) {
-    const col0 = data.map(r => r[0]);
-    const col1 = data.map(r => r[1]);
-    const cov = data.reduce((s, r) => s + r[0] * r[1], 0) / (data.length - 1);
+  findBestAngle(points) {
+    const col0 = points.map(p => p.x);
+    const col1 = points.map(p => p.y);
     const v0 = this.variance(col0);
     const v1 = this.variance(col1);
+    const cov = this.covariance(col0, col1);
 
-    // Eigenvalue computation via 2x2 covariance matrix
-    const a = v0, b = cov, c = cov, d = v1;
-    const trace = a + d;
-    const det = a * d - b * c;
-    const disc = Math.sqrt(trace * trace - 4 * det);
+    const trace = v0 + v1;
+    const det = v0 * v1 - cov * cov;
+    const disc = Math.sqrt(Math.max(0, trace * trace - 4 * det));
     const lambda1 = (trace + disc) / 2;
 
-    // Eigenvector for lambda1
     let vx, vy;
-    if (Math.abs(b) > 1e-10) {
-      vx = lambda1 - d;
-      vy = b;
-    } else if (Math.abs(c) > 1e-10) {
-      vx = c;
-      vy = lambda1 - a;
-    } else {
+    if (Math.abs(cov) > 1e-10) {
+      vx = lambda1 - v1;
+      vy = cov;
+    } else if (v0 >= v1) {
       vx = 1; vy = 0;
+    } else {
+      vx = 0; vy = 1;
     }
-    const angle = (Math.atan2(vy, vx) * 180) / Math.PI;
+
+    let angle = (Math.atan2(vy, vx) * 180) / Math.PI;
     return ((angle % 180) + 180) % 180;
   },
 
-  // Rotate data to PCA coordinates
-  rotateToPC(data, angleDeg) {
+  rotateToPC(points, angleDeg) {
     const rad = (angleDeg * Math.PI) / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
-    return data.map(p => {
-      const pc1 = p[0] * cos + p[1] * sin;
-      const pc2 = -p[0] * sin + p[1] * cos;
-      return [pc1, pc2];
+    return points.map(p => {
+      const pc1 = p.x * cos + p.y * sin;
+      const pc2 = -p.x * sin + p.y * cos;
+      return {
+        ...p,
+        pc1,
+        pc2
+      };
     });
-  },
+  }
 };
 
 // ============================================================================
-// SVG Icons (Lucide-style)
+// Ícones SVG Inline
 // ============================================================================
 const Icons = {
   Chart: () => (
@@ -123,14 +128,25 @@ const Icons = {
 };
 
 // ============================================================================
-// Canvas Chart Component (Scatter Plot with Axes)
+// Canvas Scatter Chart com Eixos, Projeções e Cores por Categoria
 // ============================================================================
-const ScatterChart = ({ data, xLabel, yLabel, lineAngle, showLine, showProjections, range }) => {
+const ScatterChart = ({
+  points,
+  xProp,
+  yProp,
+  xLabel,
+  yLabel,
+  lineAngle,
+  showLine,
+  showProjections,
+  range,
+  categoryKey
+}) => {
   const canvasRef = useRef(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !points.length) return;
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -140,121 +156,136 @@ const ScatterChart = ({ data, xLabel, yLabel, lineAngle, showLine, showProjectio
 
     const W = rect.width;
     const H = rect.height;
-    const pad = { top: 30, right: 30, bottom: 50, left: 60 };
+    const pad = { top: 30, right: 30, bottom: 50, left: 65 };
     const plotW = W - pad.left - pad.right;
     const plotH = H - pad.top - pad.bottom;
 
-    // Auto range or provided
-    const r = range || (() => {
-      const allX = data.map(d => d[0]);
-      const allY = data.map(d => d[1]);
-      const mx = Math.max(Math.abs(Math.min(...allX)), Math.abs(Math.max(...allX)), 1);
-      const my = Math.max(Math.abs(Math.min(...allY)), Math.abs(Math.max(...allY)), 1);
-      const m = Math.ceil(Math.max(mx, my) * 1.3);
-      return m;
-    })();
-
+    const r = range || 10;
     const toX = v => pad.left + ((v + r) / (2 * r)) * plotW;
     const toY = v => pad.top + ((r - v) / (2 * r)) * plotH;
 
-    // Clear
+    // Fundo limpo
     ctx.fillStyle = '#FFFFFE';
     ctx.fillRect(0, 0, W, H);
 
-    // Grid lines
+    // Grid suave
     ctx.strokeStyle = '#E8EFEE';
     ctx.lineWidth = 0.5;
-    const step = r <= 5 ? 1 : r <= 15 ? 2 : 5;
+    const step = r <= 5 ? 1 : r <= 15 ? 2 : r <= 50 ? 10 : r <= 150 ? 25 : 50;
     for (let v = -r; v <= r; v += step) {
       ctx.beginPath(); ctx.moveTo(toX(v), pad.top); ctx.lineTo(toX(v), pad.top + plotH); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(pad.left, toY(v)); ctx.lineTo(pad.left + plotW, toY(v)); ctx.stroke();
     }
 
-    // Axes
+    // Eixos Principais
     ctx.strokeStyle = '#203335';
     ctx.lineWidth = 1.5;
-    // X axis
     ctx.beginPath(); ctx.moveTo(pad.left, toY(0)); ctx.lineTo(pad.left + plotW, toY(0)); ctx.stroke();
-    // Y axis
     ctx.beginPath(); ctx.moveTo(toX(0), pad.top); ctx.lineTo(toX(0), pad.top + plotH); ctx.stroke();
 
-    // Tick marks and labels
+    // Rótulos de escala dos eixos
     ctx.fillStyle = '#5F7577';
-    ctx.font = '12px Source Sans 3, sans-serif';
+    ctx.font = '11px Source Sans 3, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     for (let v = -r; v <= r; v += step) {
-      if (v === 0) continue;
-      // X ticks
-      ctx.beginPath(); ctx.moveTo(toX(v), toY(0) - 4); ctx.lineTo(toX(v), toY(0) + 4); ctx.stroke();
-      ctx.fillText(String(v), toX(v), toY(0) + 8);
-      // Y ticks
-      ctx.beginPath(); ctx.moveTo(toX(0) - 4, toY(v)); ctx.lineTo(toX(0) + 4, toY(v)); ctx.stroke();
+      if (Math.abs(v) < 1e-6) continue;
+      // Eixo X
+      ctx.beginPath(); ctx.moveTo(toX(v), toY(0) - 3); ctx.lineTo(toX(v), toY(0) + 3); ctx.stroke();
+      ctx.fillText(Number(v.toFixed(1)).toString(), toX(v), toY(0) + 6);
+      // Eixo Y
+      ctx.beginPath(); ctx.moveTo(toX(0) - 3, toY(v)); ctx.lineTo(toX(0) + 3, toY(v)); ctx.stroke();
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(v), toX(0) - 8, toY(v));
+      ctx.fillText(Number(v.toFixed(1)).toString(), toX(0) - 6, toY(v));
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
     }
 
-    // Axis Labels
+    // Títulos dos Eixos
     ctx.fillStyle = '#203335';
-    ctx.font = 'bold 14px Lexend, sans-serif';
+    ctx.font = 'bold 13px Lexend, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(xLabel, pad.left + plotW / 2, H - 16);
+    ctx.fillText(xLabel, pad.left + plotW / 2, H - 18);
 
     ctx.save();
-    ctx.translate(16, pad.top + plotH / 2);
+    ctx.translate(18, pad.top + plotH / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textBaseline = 'middle';
     ctx.fillText(yLabel, 0, 0);
     ctx.restore();
 
-    // Line through origin
+    // Reta passando pela origem
     if (showLine && lineAngle !== undefined) {
       const rad = (lineAngle * Math.PI) / 180;
-      const len = r * 1.5;
+      const len = r * 1.6;
       const x1 = -len * Math.cos(rad), y1 = -len * Math.sin(rad);
       const x2 = len * Math.cos(rad), y2 = len * Math.sin(rad);
 
       ctx.strokeStyle = '#2A9D8F';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(toX(x1), toY(y1));
       ctx.lineTo(toX(x2), toY(y2));
       ctx.stroke();
 
-      // Projections (dashed lines from point to line)
+      // Projeções Ortogonais (Linhas tracejadas)
       if (showProjections) {
         ctx.strokeStyle = '#203335';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
-        data.forEach(p => {
-          const proj = PCAEngine.projectOntoLine(p, lineAngle);
+
+        const projSubset = points.length > 30 ? points.filter((_, i) => i % Math.ceil(points.length / 25) === 0) : points;
+
+        projSubset.forEach(p => {
+          const px = p[xProp];
+          const py = p[yProp];
+          const proj = PCAEngine.projectOntoLine({ x: px, y: py }, lineAngle);
+
           ctx.beginPath();
-          ctx.moveTo(toX(p[0]), toY(p[1]));
-          ctx.lineTo(toX(proj[0]), toY(proj[1]));
+          ctx.moveTo(toX(px), toY(py));
+          ctx.lineTo(toX(proj.x), toY(proj.y));
           ctx.stroke();
 
-          // Projection point (black dot)
+          // Ponto de projeção sobre a reta
           ctx.fillStyle = '#203335';
           ctx.beginPath();
-          ctx.arc(toX(proj[0]), toY(proj[1]), 4, 0, 2 * Math.PI);
+          ctx.arc(toX(proj.x), toY(proj.y), points.length > 30 ? 2.5 : 4, 0, 2 * Math.PI);
           ctx.fill();
         });
         ctx.setLineDash([]);
       }
     }
 
-    // Data points
-    data.forEach(p => {
-      ctx.fillStyle = '#B22222';
+    // Renderização dos Pontos de Dados
+    const isLarge = points.length > 30;
+    points.forEach((p, idx) => {
+      const px = p[xProp];
+      const py = p[yProp];
+      const category = categoryKey ? p[categoryKey] : null;
+      const pointColor = (category && SPECIES_COLORS[category]) ? SPECIES_COLORS[category] : DEFAULT_POINT_COLOR;
+
+      ctx.fillStyle = pointColor;
       ctx.beginPath();
-      ctx.arc(toX(p[0]), toY(p[1]), 5, 0, 2 * Math.PI);
+      ctx.arc(toX(px), toY(py), isLarge ? 3.5 : 5.5, 0, 2 * Math.PI);
       ctx.fill();
+
+      // Contorno fino para destacar
+      ctx.strokeStyle = '#FFFFFE';
+      ctx.lineWidth = isLarge ? 0.8 : 1.5;
+      ctx.stroke();
+
+      // Rótulos de números para datasets pequenos didáticos
+      if (points.length <= 12) {
+        ctx.fillStyle = '#203335';
+        ctx.font = 'bold 10px Lexend, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(String(idx + 1), toX(px) + 6, toY(py) - 4);
+      }
     });
-  }, [data, xLabel, yLabel, lineAngle, showLine, showProjections, range]);
+  }, [points, xProp, yProp, xLabel, yLabel, lineAngle, showLine, showProjections, range, categoryKey]);
 
   useEffect(() => {
     draw();
@@ -267,84 +298,173 @@ const ScatterChart = ({ data, xLabel, yLabel, lineAngle, showLine, showProjectio
 };
 
 // ============================================================================
-// Main App Component
+// Componente Principal do Simulador PCA
 // ============================================================================
 function App() {
-  // === State ===
+  // === Lista de Datasets Disponíveis ===
+  const [datasets, setDatasets] = useState([PENGUINS_DATASET, GENES_DATASET]);
+  const [activeDatasetId, setActiveDatasetId] = useState('penguins');
+  const [activeSampleKey, setActiveSampleKey] = useState('didactic6');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // Dataset ativo
+  const currentDataset = useMemo(() => {
+    return datasets.find(d => d.id === activeDatasetId) || datasets[0];
+  }, [datasets, activeDatasetId]);
+
+  // Colunas selecionadas
+  const [xCol, setXCol] = useState(currentDataset.defaultX);
+  const [yCol, setYCol] = useState(currentDataset.defaultY);
+
+  // Sincroniza colunas ao trocar dataset
+  useEffect(() => {
+    setXCol(currentDataset.defaultX);
+    setYCol(currentDataset.defaultY);
+    const sampleKeys = Object.keys(currentDataset.samples || {});
+    if (!currentDataset.samples[activeSampleKey]) {
+      setActiveSampleKey(sampleKeys[0] || 'default');
+    }
+    setCentered(false);
+    setShowLine(false);
+    setUseBestAngle(false);
+    setShowPCPlot(false);
+  }, [currentDataset]);
+
+  // Extrai as observações ativas
+  const rawObservations = useMemo(() => {
+    const sample = currentDataset.samples[activeSampleKey] || currentDataset.samples[Object.keys(currentDataset.samples)[0]];
+    return sample ? sample.rows : [];
+  }, [currentDataset, activeSampleKey]);
+
+  // Formata pontos com x e y
+  const rawPoints = useMemo(() => {
+    return rawObservations.map((r, i) => ({
+      ...r,
+      id: r.id || i + 1,
+      x: Number(r[xCol]),
+      y: Number(r[yCol])
+    }));
+  }, [rawObservations, xCol, yCol]);
+
+  // === Estados dos Passos Interativos ===
   const [centered, setCentered] = useState(false);
   const [showLine, setShowLine] = useState(false);
   const [angle, setAngle] = useState(30);
   const [useBestAngle, setUseBestAngle] = useState(false);
   const [showPCPlot, setShowPCPlot] = useState(false);
 
-  // === Computed Data ===
-  const rawData = PCAEngine.rawData;
-  const displayData = centered ? PCAEngine.centerData(rawData) : rawData;
-  const colA = displayData.map(r => r[0]);
-  const colB = displayData.map(r => r[1]);
-  const varA = PCAEngine.variance(colA);
-  const varB = PCAEngine.variance(colB);
-  const sumVar = varA + varB;
-  const pctA = (varA / sumVar) * 100;
-  const pctB = (varB / sumVar) * 100;
+  // Pontos ativos (originais ou centrados na origem)
+  const displayPoints = useMemo(() => {
+    if (!centered) return rawPoints;
+    return PCAEngine.centerPoints(rawPoints);
+  }, [rawPoints, centered]);
 
-  const bestAngle = centered ? PCAEngine.findBestAngle(displayData) : 0;
+  // Estatísticas das variáveis originais/centradas
+  const colX = displayPoints.map(p => p.x);
+  const colY = displayPoints.map(p => p.y);
+  const varX = PCAEngine.variance(colX);
+  const varY = PCAEngine.variance(colY);
+  const sumVar = varX + varY;
+  const pctX = sumVar > 0 ? (varX / sumVar) * 100 : 50;
+  const pctY = sumVar > 0 ? (varY / sumVar) * 100 : 50;
+
+  // Melhor ângulo analítico do autovetor da matriz de covariância
+  const bestAngle = useMemo(() => {
+    if (!centered || !displayPoints.length) return 0;
+    return PCAEngine.findBestAngle(displayPoints);
+  }, [displayPoints, centered]);
+
   const effectiveAngle = useBestAngle ? bestAngle : angle;
 
-  // PC Coordinates when rotated
-  const pcData = PCAEngine.rotateToPC(displayData, effectiveAngle);
-  const pc1Col = pcData.map(r => r[0]);
-  const pc2Col = pcData.map(r => r[1]);
+  // Dados projetados e rotacionados no sistema PC1 × PC2
+  const pcPoints = useMemo(() => {
+    if (!displayPoints.length) return [];
+    return PCAEngine.rotateToPC(displayPoints, effectiveAngle);
+  }, [displayPoints, effectiveAngle]);
+
+  const pc1Col = pcPoints.map(p => p.pc1);
+  const pc2Col = pcPoints.map(p => p.pc2);
   const varPC1 = PCAEngine.variance(pc1Col);
   const varPC2 = PCAEngine.variance(pc2Col);
-  const pctPC1 = (varPC1 / sumVar) * 100;
-  const pctPC2 = (varPC2 / sumVar) * 100;
+  const sumVarPC = varPC1 + varPC2;
+  const pctPC1 = sumVarPC > 0 ? (varPC1 / sumVarPC) * 100 : 0;
+  const pctPC2 = sumVarPC > 0 ? (varPC2 / sumVarPC) * 100 : 0;
 
-  const sumDistSq = centered ? PCAEngine.sumDistSquared(displayData, effectiveAngle) : 0;
-  const sumProjSq = centered ? PCAEngine.sumProjSquared(displayData, effectiveAngle) : 0;
+  const sumDistSq = centered ? PCAEngine.sumDistSquared(displayPoints, effectiveAngle) : 0;
+  const sumProjSq = centered ? PCAEngine.sumProjSquared(displayPoints, effectiveAngle) : 0;
 
-  // Chart range
-  const getRange = (data) => {
-    const all = data.flat();
-    const m = Math.ceil(Math.max(...all.map(Math.abs)) * 1.3);
+  // Range adaptativo para o Canvas
+  const chartRange = useMemo(() => {
+    if (!displayPoints.length) return 10;
+    const all = displayPoints.flatMap(p => [Math.abs(p.x), Math.abs(p.y)]);
+    const m = Math.ceil(Math.max(...all) * 1.25);
     return Math.max(m, 2);
-  };
+  }, [displayPoints]);
 
-  // Format number Brazilian style
+  const pcChartRange = useMemo(() => {
+    if (!pcPoints.length) return 10;
+    const all = pcPoints.flatMap(p => [Math.abs(p.pc1), Math.abs(p.pc2)]);
+    const m = Math.ceil(Math.max(...all) * 1.25);
+    return Math.max(m, 2);
+  }, [pcPoints]);
+
+  // Formatação de números padrão brasileiro
   const fmt = (n, dec = 2) => {
     if (typeof n !== 'number' || isNaN(n)) return '—';
     return n.toFixed(dec).replace('.', ',');
   };
   const fmtPct = (n) => fmt(n, 2) + '%';
 
-  // Update angle when useBestAngle toggled
+  // Atualiza slider quando "Usar o melhor ângulo" é marcado
   useEffect(() => {
     if (useBestAngle && centered) {
       setAngle(Math.round(bestAngle));
     }
   }, [useBestAngle, centered, bestAngle]);
 
-  // === Step Detection (for progress indicator) ===
-  const step = !centered ? 1 : !showLine ? 1 : !useBestAngle ? 2 : showPCPlot ? 4 : 3;
+  // Manipulador de Importação de Novo Dataset
+  const handleImportSuccess = (newDataset) => {
+    setDatasets(prev => [newDataset, ...prev]);
+    setActiveDatasetId(newDataset.id);
+    setActiveSampleKey(Object.keys(newDataset.samples)[0]);
+  };
+
+  // Nomes das colunas para os eixos
+  const xColLabel = currentDataset.numericColumns.find(c => c.key === xCol)?.label || xCol;
+  const yColLabel = currentDataset.numericColumns.find(c => c.key === yCol)?.label || yCol;
 
   return (
     <div className="app-container">
-      {/* Header */}
+      {/* Cabeçalho */}
       <header className="app-header">
         <div className="header-title">
           <h1>
             <Icons.Chart />
             Entendendo a PCA passo a passo
           </h1>
-          <p>Simulador interativo de Análise de Componentes Principais</p>
+          <p>Simulador didático e visual de Análise de Componentes Principais</p>
         </div>
         <span className="badge-mestrado">PCO207 - UNIFEI</span>
       </header>
 
+      {/* Barra de Seleção e Importação de Datasets */}
+      <DatasetControls
+        datasets={datasets}
+        activeDatasetId={activeDatasetId}
+        onSelectDataset={setActiveDatasetId}
+        activeSampleKey={activeSampleKey}
+        onSelectSample={setActiveSampleKey}
+        xCol={xCol}
+        onChangeXCol={setXCol}
+        yCol={yCol}
+        onChangeYCol={setYCol}
+        onOpenImportModal={() => setIsImportModalOpen(true)}
+      />
+
       <main className="app-content">
 
         {/* ================================================================
-            STEP 1: Conhecendo os dados
+            PASSO 1: Conhecendo os dados
             ================================================================ */}
         <section className="glass-card">
           <h2 className="card-title">
@@ -354,7 +474,7 @@ function App() {
             Conhecendo os dados
           </h2>
           <p className="card-description">
-            Começamos com duas variáveis medidas nas mesmas seis observações.
+            Começamos com duas variáveis medidas em <strong>{displayPoints.length} observações</strong> no dataset <strong>{currentDataset.name}</strong>.
           </p>
 
           <div className="control-group" style={{ marginBottom: 20, marginTop: 0 }}>
@@ -371,62 +491,90 @@ function App() {
                   }
                 }}
               />
-              Centralizar os dados
+              <strong>Centralizar os dados</strong> (subtrair a média de cada variável)
             </label>
           </div>
 
           <div className="section-layout">
-            {/* Table */}
+            {/* Tabela de Dados */}
             <div>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: 12, color: '#203335' }}>Base de dados</h3>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Observação</th>
-                    <th>Gene A</th>
-                    <th>Gene B</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayData.map((row, i) => (
-                    <tr key={i}>
-                      <td className="obs-name">Observação {i + 1}</td>
-                      <td>{fmt(row[0])}</td>
-                      <td>{fmt(row[1])}</td>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ fontSize: '1.05rem', color: '#203335', fontWeight: 600 }}>Base de dados</h3>
+                {displayPoints.length > 15 && (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Exibindo as primeiras 15 de {displayPoints.length} observações
+                  </span>
+                )}
+              </div>
+
+              <div className="table-scroll-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Observação</th>
+                      <th>{xColLabel}</th>
+                      <th>{yColLabel}</th>
                     </tr>
-                  ))}
-                  <tr className="variance-row">
-                    <td className="obs-name"><strong>Variância</strong></td>
-                    <td>{fmt(varA, 4)}</td>
-                    <td>{fmt(varB, 4)}</td>
-                  </tr>
-                  <tr className="pct-row">
-                    <td className="obs-name"><strong>% da variância</strong></td>
-                    <td>{fmtPct(pctA)}</td>
-                    <td>{fmtPct(pctB)}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="summary-stat" style={{ marginTop: 16 }}>
-                Soma das variâncias: <span>{fmt(sumVar, 4)}</span>
+                  </thead>
+                  <tbody>
+                    {displayPoints.slice(0, 15).map((row, i) => (
+                      <tr key={i}>
+                        <td className="obs-name">
+                          {row.name || `Observação ${i + 1}`}
+                          {row[currentDataset.categoryKey] && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                display: 'inline-block',
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                backgroundColor: SPECIES_COLORS[row[currentDataset.categoryKey]] || DEFAULT_POINT_COLOR
+                              }}
+                            />
+                          )}
+                        </td>
+                        <td>{fmt(row.x)}</td>
+                        <td>{fmt(row.y)}</td>
+                      </tr>
+                    ))}
+                    <tr className="variance-row">
+                      <td className="obs-name"><strong>Variância</strong></td>
+                      <td>{fmt(varX, 4)}</td>
+                      <td>{fmt(varY, 4)}</td>
+                    </tr>
+                    <tr className="pct-row">
+                      <td className="obs-name"><strong>% da variância</strong></td>
+                      <td>{fmtPct(pctX)}</td>
+                      <td>{fmtPct(pctY)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="summary-stat">
+                Soma das variâncias originais: <span>{fmt(sumVar, 4)}</span>
               </p>
             </div>
 
-            {/* Chart */}
+            {/* Gráfico de Dispersão */}
             <div className="chart-container">
               <ScatterChart
-                data={displayData}
-                xLabel="Gene A"
-                yLabel="Gene B"
-                range={getRange(displayData)}
+                points={displayPoints}
+                xProp="x"
+                yProp="y"
+                xLabel={xColLabel}
+                yLabel={yColLabel}
+                range={chartRange}
                 showLine={false}
+                categoryKey={currentDataset.categoryKey}
               />
             </div>
           </div>
         </section>
 
         {/* ================================================================
-            STEP 2: Escolhendo uma reta (visible when centered)
+            PASSO 2: Escolhendo uma reta (visível com dados centrados)
             ================================================================ */}
         {centered && (
           <section className="glass-card">
@@ -440,11 +588,11 @@ function App() {
               Escolhendo uma reta
             </h2>
             <p className="card-description">
-              Podemos escolher uma reta qualquer e observar como os pontos se comportam quando projetados sobre ela.
+              Podemos escolher uma reta qualquer passando pela origem e observar como os pontos se comportam quando projetados sobre ela.
             </p>
 
             <div className="section-layout">
-              {/* Controls */}
+              {/* Controles de Rotação */}
               <div>
                 <div className="control-group">
                   <label className="checkbox-label">
@@ -459,7 +607,7 @@ function App() {
                         }
                       }}
                     />
-                    Inserir reta
+                    <strong>Inserir reta</strong>
                   </label>
 
                   {showLine && (
@@ -496,12 +644,12 @@ function App() {
                           checked={useBestAngle}
                           onChange={(e) => setUseBestAngle(e.target.checked)}
                         />
-                        Usar o melhor ângulo
+                        <strong>Usar o melhor ângulo</strong> (calculado via autovetor da covariância)
                       </label>
 
                       {useBestAngle && (
                         <div className="metric-highlight">
-                          Melhor ângulo: <span>{fmt(bestAngle)}°</span>
+                          Melhor ângulo analítico: <span>{fmt(bestAngle)}°</span>
                         </div>
                       )}
 
@@ -510,7 +658,7 @@ function App() {
                         <span>{fmt(sumDistSq, 4)}</span>
                       </div>
                       <div className="metric-display">
-                        <strong>Soma dos quadrados das distâncias das projeções até a origem:</strong>{' '}
+                        <strong>Soma dos quadrados das projeções até a origem:</strong>{' '}
                         <span>{fmt(sumProjSq, 4)}</span>
                       </div>
                     </>
@@ -518,16 +666,19 @@ function App() {
                 </div>
               </div>
 
-              {/* Chart with line */}
+              {/* Gráfico com a Reta e Projeções */}
               <div className="chart-container">
                 <ScatterChart
-                  data={displayData}
-                  xLabel="Gene A"
-                  yLabel="Gene B"
-                  range={getRange(displayData)}
+                  points={displayPoints}
+                  xProp="x"
+                  yProp="y"
+                  xLabel={xColLabel}
+                  yLabel={yColLabel}
+                  range={chartRange}
                   showLine={showLine}
                   showProjections={showLine}
                   lineAngle={effectiveAngle}
+                  categoryKey={currentDataset.categoryKey}
                 />
               </div>
             </div>
@@ -535,7 +686,7 @@ function App() {
         )}
 
         {/* ================================================================
-            STEP 3: Rotacionando os eixos
+            PASSO 3: Rotacionando os eixos
             ================================================================ */}
         {centered && showLine && (
           <section className="glass-card">
@@ -547,43 +698,68 @@ function App() {
               Rotacionando os eixos
             </h2>
             <p className="card-description">
-              A reta escolhida define um novo eixo. As coordenadas dos pontos nesse novo sistema são chamadas de PC1 e PC2.
+              A reta escolhida define um novo eixo. As coordenadas dos pontos nesse novo sistema de coordenadas são chamadas de <strong>PC1</strong> e <strong>PC2</strong>.
             </p>
 
             <div className="section-layout">
-              {/* PC Coordinates Table */}
+              {/* Tabela de Coordenadas PC */}
               <div>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Observação</th>
-                      <th>PC1</th>
-                      <th>PC2</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pcData.map((row, i) => (
-                      <tr key={i}>
-                        <td className="obs-name">Observação {i + 1}</td>
-                        <td>{fmt(row[0], 4)}</td>
-                        <td>{fmt(row[1], 4)}</td>
-                      </tr>
-                    ))}
-                    <tr className="variance-row">
-                      <td className="obs-name"><strong>Variância</strong></td>
-                      <td>{fmt(varPC1, 4)}</td>
-                      <td>{fmt(varPC2, 4)}</td>
-                    </tr>
-                    <tr className="pct-row">
-                      <td className="obs-name"><strong>% da variância</strong></td>
-                      <td>{fmtPct(pctPC1)}</td>
-                      <td>{fmtPct(pctPC2)}</td>
-                    </tr>
-                  </tbody>
-                </table>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h3 style={{ fontSize: '1.05rem', color: '#203335', fontWeight: 600 }}>Coordenadas PC</h3>
+                  {pcPoints.length > 15 && (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Exibindo as primeiras 15 de {pcPoints.length} observações
+                    </span>
+                  )}
+                </div>
 
-                <p className="summary-stat" style={{ marginTop: 16 }}>
-                  Soma das variâncias: <span>{fmt(sumVar, 4)}</span>
+                <div className="table-scroll-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Observação</th>
+                        <th>PC1</th>
+                        <th>PC2</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pcPoints.slice(0, 15).map((row, i) => (
+                        <tr key={i}>
+                          <td className="obs-name">
+                            {row.name || `Observação ${i + 1}`}
+                            {row[currentDataset.categoryKey] && (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  display: 'inline-block',
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: '50%',
+                                  backgroundColor: SPECIES_COLORS[row[currentDataset.categoryKey]] || DEFAULT_POINT_COLOR
+                                }}
+                              />
+                            )}
+                          </td>
+                          <td>{fmt(row.pc1, 4)}</td>
+                          <td>{fmt(row.pc2, 4)}</td>
+                        </tr>
+                      ))}
+                      <tr className="variance-row">
+                        <td className="obs-name"><strong>Variância</strong></td>
+                        <td>{fmt(varPC1, 4)}</td>
+                        <td>{fmt(varPC2, 4)}</td>
+                      </tr>
+                      <tr className="pct-row">
+                        <td className="obs-name"><strong>% da variância</strong></td>
+                        <td>{fmtPct(pctPC1)}</td>
+                        <td>{fmtPct(pctPC2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="summary-stat">
+                  Soma das variâncias das PCs: <span>{fmt(sumVarPC, 4)}</span>
                 </p>
 
                 <div className="control-group" style={{ marginTop: 20 }}>
@@ -593,21 +769,24 @@ function App() {
                       checked={showPCPlot}
                       onChange={(e) => setShowPCPlot(e.target.checked)}
                     />
-                    Mostrar gráfico das PCs
+                    <strong>Mostrar gráfico das PCs</strong>
                   </label>
                 </div>
               </div>
 
-              {/* Chart: still the original view with line */}
+              {/* Gráfico de Referência */}
               <div className="chart-container">
                 <ScatterChart
-                  data={displayData}
-                  xLabel="Gene A"
-                  yLabel="Gene B"
-                  range={getRange(displayData)}
+                  points={displayPoints}
+                  xProp="x"
+                  yProp="y"
+                  xLabel={xColLabel}
+                  yLabel={yColLabel}
+                  range={chartRange}
                   showLine={true}
                   showProjections={true}
                   lineAngle={effectiveAngle}
+                  categoryKey={currentDataset.categoryKey}
                 />
               </div>
             </div>
@@ -615,7 +794,7 @@ function App() {
         )}
 
         {/* ================================================================
-            STEP 4: Gráfico das componentes principais
+            PASSO 4: Gráfico das componentes principais
             ================================================================ */}
         {centered && showLine && showPCPlot && (
           <section className="glass-card">
@@ -627,22 +806,25 @@ function App() {
               Gráfico das componentes principais
             </h2>
             <p className="card-description">
-              Os mesmos pontos agora representados no novo sistema de coordenadas (PC1 × PC2).
+              Os mesmos pontos agora estão expressos no novo sistema ortogonal (PC1 × PC2).
               {useBestAngle && (
                 <span style={{ display: 'block', marginTop: 8, fontWeight: 600, color: '#2A9D8F' }}>
-                  PC1 captura <strong>{fmtPct(pctPC1)}</strong> da variância total — máximo possível!
+                  O eixo PC1 captura <strong>{fmtPct(pctPC1)}</strong> de toda a variabilidade presente no conjunto de dados!
                 </span>
               )}
             </p>
 
-            <div style={{ maxWidth: 600, margin: '0 auto' }}>
+            <div style={{ maxWidth: 640, margin: '0 auto' }}>
               <div className="chart-container">
                 <ScatterChart
-                  data={pcData}
+                  points={pcPoints}
+                  xProp="pc1"
+                  yProp="pc2"
                   xLabel="PC1"
                   yLabel="PC2"
-                  range={getRange(pcData)}
+                  range={pcChartRange}
                   showLine={false}
+                  categoryKey={currentDataset.categoryKey}
                 />
               </div>
             </div>
@@ -650,7 +832,14 @@ function App() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* Modal de Importação CSV */}
+      <CsvImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportSuccess={handleImportSuccess}
+      />
+
+      {/* Rodapé */}
       <footer className="app-footer">
         <div className="footer-content">
           <p>2026 Simulador PCA. Desenvolvido para a disciplina PCO207 (UNIFEI).</p>

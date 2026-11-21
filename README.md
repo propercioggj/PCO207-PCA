@@ -1,3 +1,9 @@
+<div align="center">
+
+# PCO207<br>Tópicos Especiais em Inteligência Artificial<br>Universidade Federal de Itajubá
+
+</div>
+
 # Simulador PCA - Análise de Componentes Principais
 
 Simulador interativo passo a passo de **PCA (Principal Component Analysis / Análise de Componentes Principais)** para fins didáticos. A aplicação explica visualmente cada etapa do processo de PCA, desde os dados originais até a visualização final no novo sistema de coordenadas (PC1 × PC2).
@@ -11,12 +17,14 @@ A interface visual utiliza a mesma identidade do sistema **Desenvolvimento** (te
 O simulador guia o aluno por **4 etapas interativas**:
 
 ### 1. Conhecendo os dados
+
 - Exibe os dados brutos: 6 observações com 2 variáveis (Gene A e Gene B)
 - Mostra tabela com variância e % da variância de cada variável
 - Scatter plot dos dados originais
 - Checkbox para **centralizar os dados** (subtrair a média)
 
 ### 2. Escolhendo uma reta
+
 - Slider para rotacionar uma reta passando pela origem (0° a 180°)
 - Visualização das **projeções ortogonais** dos pontos sobre a reta
 - Métricas em tempo real:
@@ -25,11 +33,13 @@ O simulador guia o aluno por **4 etapas interativas**:
 - Checkbox "Usar o melhor ângulo" que calcula automaticamente o ângulo do primeiro autovetor
 
 ### 3. Rotacionando os eixos
+
 - Exibe as **coordenadas PC1 e PC2** de cada observação
 - Mostra variância e % da variância nos novos eixos
 - Demonstra que a soma das variâncias é preservada
 
 ### 4. Gráfico das componentes principais
+
 - Scatter plot final no espaço PC1 × PC2
 - Comparação visual com os dados originais
 
@@ -38,18 +48,19 @@ O simulador guia o aluno por **4 etapas interativas**:
 ## 🔢 Dados Utilizados no Exemplo
 
 | Observação | Gene A | Gene B |
-|---|---|---|
-| 1 | 11,00 | 8,00 |
-| 2 | 9,00 | 12,00 |
-| 3 | 8,00 | 10,00 |
-| 4 | 1,00 | 3,00 |
-| 5 | 3,00 | 2,00 |
-| 6 | 4,00 | 5,00 |
+| ---------- | ------ | ------ |
+| 1          | 11,00  | 8,00   |
+| 2          | 9,00   | 12,00  |
+| 3          | 8,00   | 10,00  |
+| 4          | 1,00   | 3,00   |
+| 5          | 3,00   | 2,00   |
+| 6          | 4,00   | 5,00   |
 
 - **Variância Gene A:** 15,2000 | **Variância Gene B:** 15,8667
 - **Soma das variâncias:** 31,0667
 
-Ao centralizar e encontrar o melhor ângulo (~45,73°):  
+Ao centralizar e encontrar o melhor ângulo (~45,73°):
+
 - **PC1 captura 91,86%** da variância total
 - **PC2 captura 8,14%** da variância total
 
@@ -57,14 +68,14 @@ Ao centralizar e encontrar o melhor ângulo (~45,73°):
 
 ## 🚀 Tecnologias
 
-| Tecnologia | Papel |
-|---|---|
-| **React 18** | Interface reativa e componentizada |
-| **Canvas API** | Renderização dos gráficos scatter com eixos, projeções e reta |
-| **Vite 5** | Bundler e dev server |
+| Tecnologia            | Papel                                                                       |
+| --------------------- | --------------------------------------------------------------------------- |
+| **React 18**          | Interface reativa e componentizada                                          |
+| **Canvas API**        | Renderização dos gráficos scatter com eixos, projeções e reta               |
+| **Vite 5**            | Bundler e dev server                                                        |
 | **JavaScript (ES6+)** | Motor PCA: cálculo de média, variância, autovalores, autovetores, projeções |
-| **CSS Design System** | Mesmo tema verde ardósia do projeto Tree |
-| **Docker** | Conteinerização com Nginx Alpine |
+| **CSS Design System** | Mesmo tema verde ardósia do projeto Tree                                    |
+| **Docker**            | Conteinerização com Nginx Alpine                                            |
 
 ---
 
