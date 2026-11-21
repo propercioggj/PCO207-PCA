@@ -35,6 +35,26 @@ O simulador guia o aluno por **4 etapas interativas**:
 
 ---
 
+## 🔢 Dados Utilizados no Exemplo
+
+| Observação | Gene A | Gene B |
+|---|---|---|
+| 1 | 11,00 | 8,00 |
+| 2 | 9,00 | 12,00 |
+| 3 | 8,00 | 10,00 |
+| 4 | 1,00 | 3,00 |
+| 5 | 3,00 | 2,00 |
+| 6 | 4,00 | 5,00 |
+
+- **Variância Gene A:** 15,2000 | **Variância Gene B:** 15,8667
+- **Soma das variâncias:** 31,0667
+
+Ao centralizar e encontrar o melhor ângulo (~45,73°):  
+- **PC1 captura 91,86%** da variância total
+- **PC2 captura 8,14%** da variância total
+
+---
+
 ## 🚀 Tecnologias
 
 | Tecnologia | Papel |
@@ -101,18 +121,3 @@ Repositório oficial:
 ```bash
 git clone git@github.com:propercioggj/PCO207-PCA.git
 ```
-
-| Observação | Gene A | Gene B |
-|---|---|---|
-| 1 | 11,00 | 8,00 |
-| 2 | 9,00 | 12,00 |
-| 3 | 8,00 | 10,00 |
-| 4 | 1,00 | 3,00 |
-| 5 | 3,00 | 2,00 |
-| 6 | 4,00 | 5,00 |
-
-**Variância Gene A:** 15,2000 | **Variância Gene B:** 15,8667  
-**Soma das variâncias:** 31,0667
-
-Ao centralizar e encontrar o melhor ângulo (~45,73°):  
-**PC1 captura 91,86%** | **PC2 captura 8,14%** da variância total.
