@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css';
 import {
   PENGUINS_DATASET,
+  PESO_ALTURA_DATASET,
   GENES_DATASET,
   SPECIES_COLORS,
   DEFAULT_POINT_COLOR
@@ -31,6 +32,10 @@ const PCAEngine = {
     return arrX.reduce((s, x, i) => s + (x - mx) * (arrY[i] - my), 0) / (arrX.length - 1);
   },
 
+  standardDeviation(arr) {
+    return Math.sqrt(this.variance(arr));
+  },
+
   centerPoints(points) {
     const col0 = points.map(p => p.x);
     const col1 = points.map(p => p.y);
@@ -40,6 +45,22 @@ const PCAEngine = {
       ...p,
       x: p.x - m0,
       y: p.y - m1,
+      origX: p.x,
+      origY: p.y
+    }));
+  },
+
+  standardizePoints(points) {
+    const col0 = points.map(p => p.x);
+    const col1 = points.map(p => p.y);
+    const m0 = this.mean(col0);
+    const m1 = this.mean(col1);
+    const s0 = Math.sqrt(this.variance(col0)) || 1;
+    const s1 = Math.sqrt(this.variance(col1)) || 1;
+    return points.map(p => ({
+      ...p,
+      x: (p.x - m0) / s0,
+      y: (p.y - m1) / s1,
       origX: p.x,
       origY: p.y
     }));
@@ -302,7 +323,7 @@ const ScatterChart = ({
 // ============================================================================
 function App() {
   // === Lista de Datasets Disponíveis ===
-  const [datasets, setDatasets] = useState([PENGUINS_DATASET, GENES_DATASET]);
+  const [datasets, setDatasets] = useState([PENGUINS_DATASET, PESO_ALTURA_DATASET, GENES_DATASET]);
   const [activeDatasetId, setActiveDatasetId] = useState('penguins');
   const [activeSampleKey, setActiveSampleKey] = useState('didactic6');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -325,6 +346,7 @@ function App() {
       setActiveSampleKey(sampleKeys[0] || 'default');
     }
     setCentered(false);
+    setStandardized(false);
     setShowLine(false);
     setUseBestAngle(false);
     setShowPCPlot(false);
@@ -348,18 +370,20 @@ function App() {
 
   // === Estados dos Passos Interativos ===
   const [centered, setCentered] = useState(false);
+  const [standardized, setStandardized] = useState(false);
   const [showLine, setShowLine] = useState(false);
   const [angle, setAngle] = useState(30);
   const [useBestAngle, setUseBestAngle] = useState(false);
   const [showPCPlot, setShowPCPlot] = useState(false);
 
-  // Pontos ativos (originais ou centrados na origem)
+  // Pontos ativos (originais, centrados ou padronizados na origem)
   const displayPoints = useMemo(() => {
-    if (!centered) return rawPoints;
-    return PCAEngine.centerPoints(rawPoints);
-  }, [rawPoints, centered]);
+    if (standardized) return PCAEngine.standardizePoints(rawPoints);
+    if (centered) return PCAEngine.centerPoints(rawPoints);
+    return rawPoints;
+  }, [rawPoints, centered, standardized]);
 
-  // Estatísticas das variáveis originais/centradas
+  // Estatísticas das variáveis originais/centradas/padronizadas
   const colX = displayPoints.map(p => p.x);
   const colY = displayPoints.map(p => p.y);
   const varX = PCAEngine.variance(colX);
@@ -370,9 +394,9 @@ function App() {
 
   // Melhor ângulo analítico do autovetor da matriz de covariância
   const bestAngle = useMemo(() => {
-    if (!centered || !displayPoints.length) return 0;
+    if ((!centered && !standardized) || !displayPoints.length) return 0;
     return PCAEngine.findBestAngle(displayPoints);
-  }, [displayPoints, centered]);
+  }, [displayPoints, centered, standardized]);
 
   const effectiveAngle = useBestAngle ? bestAngle : angle;
 
@@ -390,23 +414,26 @@ function App() {
   const pctPC1 = sumVarPC > 0 ? (varPC1 / sumVarPC) * 100 : 0;
   const pctPC2 = sumVarPC > 0 ? (varPC2 / sumVarPC) * 100 : 0;
 
-  const sumDistSq = centered ? PCAEngine.sumDistSquared(displayPoints, effectiveAngle) : 0;
-  const sumProjSq = centered ? PCAEngine.sumProjSquared(displayPoints, effectiveAngle) : 0;
+  const isTransformed = centered || standardized;
+  const sumDistSq = isTransformed ? PCAEngine.sumDistSquared(displayPoints, effectiveAngle) : 0;
+  const sumProjSq = isTransformed ? PCAEngine.sumProjSquared(displayPoints, effectiveAngle) : 0;
 
   // Range adaptativo para o Canvas
   const chartRange = useMemo(() => {
     if (!displayPoints.length) return 10;
+    if (standardized) return 2;
     const all = displayPoints.flatMap(p => [Math.abs(p.x), Math.abs(p.y)]);
     const m = Math.ceil(Math.max(...all) * 1.25);
     return Math.max(m, 2);
-  }, [displayPoints]);
+  }, [displayPoints, standardized]);
 
   const pcChartRange = useMemo(() => {
     if (!pcPoints.length) return 10;
+    if (standardized) return 2;
     const all = pcPoints.flatMap(p => [Math.abs(p.pc1), Math.abs(p.pc2)]);
     const m = Math.ceil(Math.max(...all) * 1.25);
     return Math.max(m, 2);
-  }, [pcPoints]);
+  }, [pcPoints, standardized]);
 
   // Formatação de números padrão brasileiro
   const fmt = (n, dec = 2) => {
@@ -415,12 +442,24 @@ function App() {
   };
   const fmtPct = (n) => fmt(n, 2) + '%';
 
+  const fmtCoord = (n, colKey) => {
+    if (typeof n !== 'number' || isNaN(n)) return '—';
+    if (!standardized) {
+      if (colKey === 'altura' || (Math.abs(n) < 1 && Math.abs(n) > 0.0001)) {
+        return n.toFixed(3).replace('.', ',');
+      }
+      return n.toFixed(2).replace('.', ',');
+    }
+    const str = n.toFixed(4);
+    return parseFloat(str).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  };
+
   // Atualiza slider quando "Usar o melhor ângulo" é marcado
   useEffect(() => {
-    if (useBestAngle && centered) {
+    if (useBestAngle && (centered || standardized)) {
       setAngle(Math.round(bestAngle));
     }
-  }, [useBestAngle, centered, bestAngle]);
+  }, [useBestAngle, centered, standardized, bestAngle]);
 
   // Manipulador de Importação de Novo Dataset
   const handleImportSuccess = (newDataset) => {
@@ -440,7 +479,9 @@ function App() {
         <div className="header-title">
           <h1>
             <Icons.Chart />
-            Entendendo a PCA passo a passo
+            {currentDataset.id === 'peso_altura'
+              ? 'Entendendo a importância da padronização na PCA'
+              : 'Entendendo a PCA passo a passo'}
           </h1>
           <p>Simulador didático e visual de Análise de Componentes Principais</p>
         </div>
@@ -474,25 +515,52 @@ function App() {
             Conhecendo os dados
           </h2>
           <p className="card-description">
-            Começamos com duas variáveis medidas em <strong>{displayPoints.length} observações</strong> no dataset <strong>{currentDataset.name}</strong>.
+            {currentDataset.id === 'peso_altura' ? (
+              <>Agora temos duas variáveis medidas nas mesmas 10 pessoas: <strong>peso, em kg</strong>, e <strong>altura, em metros</strong>.</>
+            ) : currentDataset.id === 'genes' ? (
+              <>Começamos com duas variáveis medidas nas mesmas <strong>seis observações</strong>.</>
+            ) : (
+              <>Começamos com duas variáveis medidas em <strong>{displayPoints.length} observações</strong> no dataset <strong>{currentDataset.name}</strong>.</>
+            )}
           </p>
 
-          <div className="control-group" style={{ marginBottom: 20, marginTop: 0 }}>
+          <div className="checkboxes-container">
             <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={centered}
                 onChange={(e) => {
-                  setCentered(e.target.checked);
-                  if (!e.target.checked) {
+                  const val = e.target.checked;
+                  setCentered(val);
+                  if (!val) {
+                    setStandardized(false);
                     setShowLine(false);
                     setUseBestAngle(false);
                     setShowPCPlot(false);
                   }
                 }}
               />
-              <strong>Centralizar os dados</strong> (subtrair a média de cada variável)
+              <strong>Centralizar os dados</strong>
             </label>
+
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={standardized}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setStandardized(val);
+                  if (val) {
+                    setCentered(true);
+                  }
+                }}
+              />
+              <strong>Padronizar os dados</strong>
+            </label>
+
+            <p className="standardize-hint">
+              A padronização centraliza os dados e, além disso, divide cada variável pelo seu desvio-padrão.
+            </p>
           </div>
 
           <div className="section-layout">
@@ -534,14 +602,14 @@ function App() {
                             />
                           )}
                         </td>
-                        <td>{fmt(row.x)}</td>
-                        <td>{fmt(row.y)}</td>
+                        <td>{fmtCoord(row.x, xCol)}</td>
+                        <td>{fmtCoord(row.y, yCol)}</td>
                       </tr>
                     ))}
                     <tr className="variance-row">
                       <td className="obs-name"><strong>Variância</strong></td>
-                      <td>{fmt(varX, 4)}</td>
-                      <td>{fmt(varY, 4)}</td>
+                      <td>{fmt(varX, standardized ? 4 : (varX < 0.1 ? 6 : 4))}</td>
+                      <td>{fmt(varY, standardized ? 4 : (varY < 0.1 ? 6 : 4))}</td>
                     </tr>
                     <tr className="pct-row">
                       <td className="obs-name"><strong>% da variância</strong></td>
@@ -553,7 +621,7 @@ function App() {
               </div>
 
               <p className="summary-stat">
-                Soma das variâncias originais: <span>{fmt(sumVar, 4)}</span>
+                Soma das variâncias {standardized ? 'padronizadas' : 'originais'}: <span>{fmt(sumVar, standardized ? 4 : (sumVar < 1 ? 6 : 4))}</span>
               </p>
             </div>
 
@@ -574,9 +642,9 @@ function App() {
         </section>
 
         {/* ================================================================
-            PASSO 2: Escolhendo uma reta (visível com dados centrados)
+            PASSO 2: Escolhendo uma reta (visível com dados centrados ou padronizados)
             ================================================================ */}
-        {centered && (
+        {isTransformed && (
           <section className="glass-card">
             <h2 className="card-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -688,7 +756,7 @@ function App() {
         {/* ================================================================
             PASSO 3: Rotacionando os eixos
             ================================================================ */}
-        {centered && showLine && (
+        {isTransformed && showLine && (
           <section className="glass-card">
             <h2 className="card-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -796,7 +864,7 @@ function App() {
         {/* ================================================================
             PASSO 4: Gráfico das componentes principais
             ================================================================ */}
-        {centered && showLine && showPCPlot && (
+        {isTransformed && showLine && showPCPlot && (
           <section className="glass-card">
             <h2 className="card-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

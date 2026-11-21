@@ -54,7 +54,7 @@ export default function DatasetControls({
           >
             {datasets.map(d => (
               <option key={d.id} value={d.id}>
-                {d.id === 'penguins' ? '🐧 ' : d.id === 'genes' ? '🧬 ' : '📁 '}
+                {d.id === 'penguins' ? '🐧 ' : d.id === 'peso_altura' ? '⚖️ ' : d.id === 'genes' ? '🧬 ' : '📁 '}
                 {d.name}
               </option>
             ))}

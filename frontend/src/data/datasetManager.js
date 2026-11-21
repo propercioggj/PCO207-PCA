@@ -36,6 +36,38 @@ export const GENES_DATASET = {
   }
 };
 
+// Dataset Peso vs Altura (Exemplo Didático de Padronização - 10 pessoas)
+export const PESO_ALTURA_DATASET = {
+  id: 'peso_altura',
+  name: 'Peso vs Altura (Importância da Padronização)',
+  description: '10 observações com grandezas diferentes (Peso em kg e Altura em metros) para evidenciar a necessidade da padronização.',
+  categoryKey: null,
+  numericColumns: [
+    { key: 'peso', label: 'Peso' },
+    { key: 'altura', label: 'Altura' }
+  ],
+  defaultX: 'peso',
+  defaultY: 'altura',
+  samples: {
+    '10': {
+      label: '10 Observações (Exemplo da Videoaula)',
+      description: 'Média de Peso: 70 kg | Média de Altura: 1,70 m',
+      rows: [
+        { id: 1, name: 'Observação 1', peso: 63.20, altura: 1.461 },
+        { id: 2, name: 'Observação 2', peso: 65.20, altura: 1.731 },
+        { id: 3, name: 'Observação 3', peso: 74.20, altura: 1.711 },
+        { id: 4, name: 'Observação 4', peso: 75.20, altura: 1.591 },
+        { id: 5, name: 'Observação 5', peso: 66.20, altura: 1.701 },
+        { id: 6, name: 'Observação 6', peso: 83.20, altura: 2.031 },
+        { id: 7, name: 'Observação 7', peso: 64.20, altura: 1.671 },
+        { id: 8, name: 'Observação 8', peso: 69.20, altura: 1.801 },
+        { id: 9, name: 'Observação 9', peso: 79.20, altura: 1.831 },
+        { id: 10, name: 'Observação 10', peso: 60.20, altura: 1.471 },
+      ]
+    }
+  }
+};
+
 // Amostra balanceada de 15 pinguins (5 de cada espécie)
 const sample15Penguins = [
   ...penguinsRaw.all.filter(p => p.species === 'Adelie').slice(0, 5),

@@ -283,6 +283,27 @@ h1, h2, h3, h4, h5, h6 {
   user-select: none;
 }
 
+.checkboxes-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.checkboxes-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.standardize-hint {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
 .checkbox-label input[type="checkbox"] {
   width: 18px;
   height: 18px;
