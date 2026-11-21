@@ -45,24 +45,40 @@ O simulador guia o aluno por **4 etapas interativas**:
 
 ---
 
-## 🔢 Dados Utilizados no Exemplo
+## 🐧 Dataset Padrão: Palmer Penguins
 
-| Observação | Gene A | Gene B |
-| ---------- | ------ | ------ |
-| 1          | 11,00  | 8,00   |
-| 2          | 9,00   | 12,00  |
-| 3          | 8,00   | 10,00  |
-| 4          | 1,00   | 3,00   |
-| 5          | 3,00   | 2,00   |
-| 6          | 4,00   | 5,00   |
+O simulador utiliza por padrão os dados do famoso dataset **[Palmer Penguins](https://github.com/mwaskom/seaborn-data/blob/master/penguins.csv)** (Gorman, Williams & Fraser, 2014), amplamente utilizado no ensino de Aprendizado de Máquina e Estatística.
 
-- **Variância Gene A:** 15,2000 | **Variância Gene B:** 15,8667
-- **Soma das variâncias:** 31,0667
+### Análise dos Dados Escolhidos:
+- **Variáveis Padrão Selecionadas:**
+  - **Variável 1 (Eixo X):** `bill_length_mm` (Comprimento do Bico em mm)
+  - **Variável 2 (Eixo Y):** `flipper_length_mm` (Comprimento da Nadadeira em mm)
+- **Por que esta combinação é a mais didática?**
+  1. **Forte Correlação Positiva ($r = 0,66$):** Existe uma relação linear clara e intuitiva entre o tamanho do bico e das nadadeiras.
+  2. **Separação Natural das 3 Espécies:**
+     - 🟠 **Adelie:** bicos menores (~38,8 mm) e nadadeiras menores (~190 mm);
+     - 🟣 **Chinstrap:** bicos longos (~48,8 mm) e nadadeiras intermediárias (~195,8 mm);
+     - 🟢 **Gentoo:** os maiores pinguins, com nadadeiras longas (~217,2 mm) e bicos grandes (~47,5 mm).
+  3. **Excelente Captura pelo PC1 ($> 93\%$):**
+     - Tanto na amostra didática quanto na população completa de 342 pinguins, o primeiro componente principal (**PC1**) captura **mais de 93%** de toda a variância dos dados ao longo de um ângulo ótimo de **~75° a 76°**!
 
-Ao centralizar e encontrar o melhor ângulo (~45,73°):
+### Modos de Amostragem Didática:
+- **Amostra Didática (6 Pinguins - Padrão):** 2 Adelie, 2 Chinstrap e 2 Gentoo, permitindo inspeção individual na tabela e traçado limpo de cada projeção ortogonal.
+- **Amostra Balanceada (15 Pinguins):** 5 de cada espécie para observar a dispersão intra e entre espécies.
+- **População Completa (342 Pinguins):** Nuvem de dispersão completa com agrupamentos das 3 espécies.
 
-- **PC1 captura 91,86%** da variância total
-- **PC2 captura 8,14%** da variância total
+---
+
+## 📂 Importação de Outros Datasets (CSV)
+
+O simulador permite importar qualquer outro arquivo `.csv` diretamente na interface através do botão **"Importar Novo Dataset (CSV)..."**:
+
+- **Upload de arquivo** (`.csv`) ou colar texto CSV diretamente;
+- Suporte a delimitadores por **vírgula (`,`)** ou **ponto e vírgula (`;`)**;
+- Detecção automática de colunas numéricas e de texto;
+- Seleção customizada de quais colunas usar para o **Eixo X** e **Eixo Y**;
+- Seleção opcional de coluna de rótulo / categoria para coloração de pontos;
+- Definição do tamanho da amostra (6, 12, 30 observações ou dataset completo).
 
 ---
 
