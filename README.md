@@ -18,10 +18,11 @@ O simulador guia o aluno por **4 etapas interativas**:
 
 ### 1. Conhecendo os dados
 
-- Exibe os dados brutos: 6 observações com 2 variáveis (Gene A e Gene B)
-- Mostra tabela com variância e % da variância de cada variável
-- Scatter plot dos dados originais
-- Checkbox para **centralizar os dados** (subtrair a média)
+- Exibe os dados brutos e tabela com variância e % da variância de cada variável
+- Scatter plot com coordenadas e eixos adaptativos
+- Checkbox para **Centralizar os dados** (subtrair a média de cada variável)
+- Checkbox para **Padronizar os dados** (subtrair a média e dividir pelo desvio-padrão — $z$-score)
+- Suporte a datasets com grandezas e escalas distintas (ex: Peso em kg vs Altura em metros) evidenciando o impacto e a necessidade da padronização na PCA
 
 ### 2. Escolhendo uma reta
 
