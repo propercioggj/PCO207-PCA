@@ -8,7 +8,7 @@
 
 Simulador interativo passo a passo de **PCA (Principal Component Analysis / Análise de Componentes Principais)** para fins didáticos. A aplicação explica visualmente cada etapa do processo de PCA, desde os dados originais até a visualização final no novo sistema de coordenadas (PC1 × PC2).
 
-A interface visual utiliza a mesma identidade visual do simulador de Árvore Binária de Busca (BST): https://github.com/propercioggj/PCO001-BST.
+**Link para execução do projeto: [https://pca.propercio.dpdns.org/](https://pca.propercio.dpdns.org/)**
 
 ---
 
