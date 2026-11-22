@@ -137,10 +137,6 @@ Acesse: 👉 **http://localhost:5174**
 docker compose up -d --build
 ```
 
-Acesse: 👉 **https://pca.propercio.dpdns.org**
-
-> O arquivo `docker-compose.override.yml` conecta o container à rede `application_proxy` para funcionar com o proxy reverso em produção.
-
 ---
 
 ## GitHub
